@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO; // Добавлено для работы с MemoryStream
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -41,20 +42,17 @@ namespace ClothesBotUser
 
         static async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken ct)
         {
-            // 1. ОБРАБОТКА НАЖАТИЙ ПОД ТОВАРОМ (Callback)
             if (update.CallbackQuery is { } callbackQuery)
             {
                 if (callbackQuery.Data.StartsWith("buy_"))
                 {
                     var itemId = callbackQuery.Data.Split('_')[1];
-                    // Здесь будет логика выставления счета Stars
                     await botClient.SendMessage(callbackQuery.Message.Chat.Id, 
                         $"Вы выбрали товар №{itemId}. Начинаем оформление счета...", cancellationToken: ct);
                 }
                 return;
             }
 
-            // 2. ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ
             if (update.Message is not { } message || message.Text is not { } messageText) return;
 
             var chatId = message.Chat.Id;
@@ -63,7 +61,7 @@ namespace ClothesBotUser
             {
                 case "/start":
                     await botClient.SendMessage(chatId, 
-                        "Добро пожаловать в наш магазин одежды! Выберите раздел в меню:", 
+                        "Добро пожаловать ! Выберите раздел в меню:", 
                         replyMarkup: KeyboardHelper.MainMenu(), cancellationToken: ct);
                     break;
 
@@ -93,23 +91,34 @@ namespace ClothesBotUser
 
             foreach (var item in items)
             {
-                // Формируем статус наличия для пользователя
                 string availabilityStatus = item.Availability == "in_stock" ? "✅ В наличии" : "⏳ Под заказ";
 
-                string caption = $"**{item.Name}**\n\n" +
+                // Используем HTML для более надежной разметки
+                string caption = $"<b>{item.Name}</b>\n\n" +
                                 $"{item.Description}\n\n" +
                                 $"Статус: {availabilityStatus}\n" +
-                                $"Цена: {item.PriceStars} ";
+                                $"Цена: {item.PriceStars} Stars";
 
-                // Отправляем фото с кнопкой покупки
-                await _botClient.SendPhoto(
-                    chatId: chatId,
-                    photo: item.PhotoId, // Если item.PhotoId это строка с FileId
-                    caption: caption,
-                    parseMode: ParseMode.Markdown,
-                    replyMarkup: KeyboardHelper.BuyButton(item.Id),
-                    cancellationToken: ct
-                );
+                // ПРОВЕРКА И ОТПРАВКА ФОТО ИЗ БАЗЫ
+                if (item.PhotoBytes != null && item.PhotoBytes.Length > 0)
+                {
+                    using (var ms = new MemoryStream(item.PhotoBytes))
+                    {
+                        await _botClient.SendPhoto(
+                            chatId: chatId,
+                            photo: InputFile.FromStream(ms), // Отправка файла напрямую из памяти
+                            caption: caption,
+                            parseMode: ParseMode.Html,
+                            replyMarkup: KeyboardHelper.BuyButton(item.Id),
+                            cancellationToken: ct
+                        );
+                    }
+                }
+                else
+                {
+                    // Если фото нет, отправляем просто текст
+                    await _botClient.SendMessage(chatId, caption, parseMode: ParseMode.Html, replyMarkup: KeyboardHelper.BuyButton(item.Id), cancellationToken: ct);
+                }
             }
         }
 
