@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO; // Добавлено для работы с MemoryStream
+using System.IO;
+using System.Linq; // Добавлено для Select
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -9,6 +10,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using ClothesBotUser.Helpers;
 using ClothesBotUser.Services;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace ClothesBotUser
 {
@@ -42,83 +44,123 @@ namespace ClothesBotUser
 
         static async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken ct)
         {
+            // 1. ОБРАБОТКА НАЖАТИЙ КНОПОК (Inline)
             if (update.CallbackQuery is { } callbackQuery)
             {
-                if (callbackQuery.Data.StartsWith("buy_"))
+                var data = callbackQuery.Data ?? "";
+                var chatId = callbackQuery.Message.Chat.Id;
+
+                if (data.StartsWith("cat_")) // Выбрана категория
                 {
-                    var itemId = callbackQuery.Data.Split('_')[1];
-                    await botClient.SendMessage(callbackQuery.Message.Chat.Id, 
+                    var category = data.Split('_')[1];
+                    await ShowCategoryItemsAsync(chatId, category, ct);
+                }
+                else if (data.StartsWith("view_")) // Выбран конкретный товар из списка
+                {
+                    var itemId = int.Parse(data.Split('_')[1]);
+                    await ShowProductCardAsync(chatId, itemId, ct);
+                }
+                else if (data.StartsWith("buy_")) // Оформление покупки
+                {
+                    var itemId = data.Split('_')[1];
+                    await botClient.SendMessage(chatId, 
                         $"Вы выбрали товар №{itemId}. Начинаем оформление счета...", cancellationToken: ct);
                 }
+                
+                // Убираем "часики" на кнопке
+                await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
                 return;
             }
 
+            // 2. ОБРАБОТКА ТЕКСТОВЫХ КОМАНД
             if (update.Message is not { } message || message.Text is not { } messageText) return;
-
-            var chatId = message.Chat.Id;
+            var msgChatId = message.Chat.Id;
 
             switch (messageText)
             {
                 case "/start":
-                    await botClient.SendMessage(chatId, 
-                        "Добро пожаловать ! Выберите раздел в меню:", 
+                    await botClient.SendMessage(msgChatId, 
+                        "Добро пожаловать! Выберите раздел в меню:", 
                         replyMarkup: KeyboardHelper.MainMenu(), cancellationToken: ct);
                     break;
 
                 case "🛍 Каталог":
-                    await ShowCatalogAsync(chatId, ct);
+                    await ShowCategoriesMenuAsync(msgChatId, ct);
                     break;
 
                 case "📦 Мои заказы":
-                    await botClient.SendMessage(chatId, "Раздел в разработке. Скоро вы сможете видеть статус ваших посылок.", cancellationToken: ct);
+                    await botClient.SendMessage(msgChatId, "Раздел в разработке.", cancellationToken: ct);
                     break;
 
                 case "🆘 Поддержка":
-                    await botClient.SendMessage(chatId, "По всем вопросам пишите: @admin_username", cancellationToken: ct);
+                    await botClient.SendMessage(msgChatId, "Пишите: @admin_username", cancellationToken: ct);
                     break;
             }
         }
 
-        private static async Task ShowCatalogAsync(long chatId, CancellationToken ct)
-        {
-            var items = await _dbService.GetAllItemsAsync(ct);
+        // --- ЛОГИКА КАТАЛОГА ---
 
-            if (items.Count == 0)
+        // Шаг 1: Выбор категории
+        private static async Task ShowCategoriesMenuAsync(long chatId, CancellationToken ct)
+        {
+            var categories = await _dbService.GetCategoriesAsync(ct); // Берем из БД!
+    
+            var buttons = categories.Select(c => 
+                new[] { InlineKeyboardButton.WithCallbackData(c.Name, $"cat_{c.Id}") }).ToArray();
+
+            await _botClient.SendMessage(chatId, "Выберите интересующий раздел:", 
+                replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
+        }
+        // Шаг 2: Список товаров в категории (Текстовый список-кнопки)
+        private static async Task ShowCategoryItemsAsync(long chatId, string categoryIdStr, CancellationToken ct)
+        {
+            int catId = int.Parse(categoryIdStr);
+            var items = await _dbService.GetItemsByCategoryIdAsync(catId, ct); // Фильтр по ID категории
+
+            if (!items.Any())
             {
-                await _botClient.SendMessage(chatId, "К сожалению, каталог пока пуст.", cancellationToken: ct);
+                await _botClient.SendMessage(chatId, "В этом разделе пока нет товаров.", cancellationToken: ct);
                 return;
             }
 
-            foreach (var item in items)
+            var buttons = items.Select(i => 
+                new[] { InlineKeyboardButton.WithCallbackData($"{i.Name} — {i.PriceStars} Stars", $"view_{i.Id}") }).ToArray();
+
+            await _botClient.SendMessage(chatId, "Товары в этом разделе:", 
+                replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
+        }
+
+        // Шаг 3: Детальная карточка товара с фото
+        private static async Task ShowProductCardAsync(long chatId, int itemId, CancellationToken ct)
+        {
+            var item = await _dbService.GetItemByIdAsync(itemId, ct);
+            string availabilityStatus = item.Availability == "in_stock" ? "✅ В наличии" : "⏳ Под заказ";
+            string caption = $"<b>{item.Name}</b>\n\n" +
+                            $"{item.Description}\n\n" +
+                            $"Статус: {availabilityStatus}\n" +
+                            $"Цена: {item.PriceStars} Stars";
+
+            if (item.PhotoBytes != null && item.PhotoBytes.Length > 0)
             {
-                string availabilityStatus = item.Availability == "in_stock" ? "✅ В наличии" : "⏳ Под заказ";
-
-                // Используем HTML для более надежной разметки
-                string caption = $"<b>{item.Name}</b>\n\n" +
-                                $"{item.Description}\n\n" +
-                                $"Статус: {availabilityStatus}\n" +
-                                $"Цена: {item.PriceStars} Stars";
-
-                // ПРОВЕРКА И ОТПРАВКА ФОТО ИЗ БАЗЫ
-                if (item.PhotoBytes != null && item.PhotoBytes.Length > 0)
+                using (var ms = new MemoryStream(item.PhotoBytes))
                 {
-                    using (var ms = new MemoryStream(item.PhotoBytes))
-                    {
-                        await _botClient.SendPhoto(
-                            chatId: chatId,
-                            photo: InputFile.FromStream(ms), // Отправка файла напрямую из памяти
-                            caption: caption,
-                            parseMode: ParseMode.Html,
-                            replyMarkup: KeyboardHelper.BuyButton(item.Id),
-                            cancellationToken: ct
-                        );
-                    }
+                    await _botClient.SendPhoto(
+                        chatId: chatId,
+                        photo: InputFile.FromStream(ms),
+                        caption: caption,
+                        parseMode: ParseMode.Html,
+                        replyMarkup: new InlineKeyboardMarkup(new[] {
+                            new[] { InlineKeyboardButton.WithCallbackData("💳 Купить", $"buy_{item.Id}") },
+                            new[] { InlineKeyboardButton.WithCallbackData("⬅️ К списку", $"cat_all") }
+                        }),
+                        cancellationToken: ct
+                    );
                 }
-                else
-                {
-                    // Если фото нет, отправляем просто текст
-                    await _botClient.SendMessage(chatId, caption, parseMode: ParseMode.Html, replyMarkup: KeyboardHelper.BuyButton(item.Id), cancellationToken: ct);
-                }
+            }
+            else
+            {
+                await _botClient.SendMessage(chatId, caption, parseMode: ParseMode.Html, 
+                    replyMarkup: KeyboardHelper.BuyButton(item.Id), cancellationToken: ct);
             }
         }
 
