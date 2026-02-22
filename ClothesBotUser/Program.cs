@@ -124,7 +124,7 @@ namespace ClothesBotUser
             }
 
             var buttons = items.Select(i => 
-                new[] { InlineKeyboardButton.WithCallbackData($"{i.Name} — {i.PriceStars} Stars", $"view_{i.Id}") }).ToArray();
+                new[] { InlineKeyboardButton.WithCallbackData($"{i.Name} — {i.PriceStars} ", $"view_{i.Id}") }).ToArray();
 
             await _botClient.SendMessage(chatId, "Товары в этом разделе:", 
                 replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
@@ -138,7 +138,7 @@ namespace ClothesBotUser
             string caption = $"<b>{item.Name}</b>\n\n" +
                             $"{item.Description}\n\n" +
                             $"Статус: {availabilityStatus}\n" +
-                            $"Цена: {item.PriceStars} Stars";
+                            $"Цена: {item.PriceStars}";
 
             if (item.PhotoBytes != null && item.PhotoBytes.Length > 0)
             {
