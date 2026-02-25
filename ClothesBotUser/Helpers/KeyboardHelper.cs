@@ -7,8 +7,8 @@ namespace ClothesBotUser.Helpers
         // Главное меню, которое всегда висит внизу
         public static ReplyKeyboardMarkup MainMenu() => new(new[]
         {
-            new KeyboardButton[] { " Каталог" },
-            new KeyboardButton[] { " Мои заказы", "🆘 Поддержка" }
+            new KeyboardButton[] { "Каталог" },
+            new KeyboardButton[] { "Мои заказы", "🆘 Поддержка" }
         }) 
         { 
             ResizeKeyboard = true // Чтобы кнопки были компактными

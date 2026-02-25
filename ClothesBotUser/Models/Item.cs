@@ -6,6 +6,7 @@ public class Item
     public int PriceStars { get; set; } 
     public byte[] PhotoBytes { get; set; } 
     public string Availability { get; set; }
+    public int? CategoryId { get; set; }
     
     public string Category { get; set; }
 }

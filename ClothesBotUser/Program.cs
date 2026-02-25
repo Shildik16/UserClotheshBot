@@ -84,11 +84,11 @@ namespace ClothesBotUser
                         replyMarkup: KeyboardHelper.MainMenu(), cancellationToken: ct);
                     break;
 
-                case "🛍 Каталог":
+                case "Каталог":
                     await ShowCategoriesMenuAsync(msgChatId, ct);
                     break;
 
-                case "📦 Мои заказы":
+                case "Мои заказы":
                     await botClient.SendMessage(msgChatId, "Раздел в разработке.", cancellationToken: ct);
                     break;
 
@@ -151,8 +151,7 @@ namespace ClothesBotUser
                         parseMode: ParseMode.Html,
                         replyMarkup: new InlineKeyboardMarkup(new[] {
                             new[] { InlineKeyboardButton.WithCallbackData("💳 Купить", $"buy_{item.Id}") },
-                            new[] { InlineKeyboardButton.WithCallbackData("⬅️ К списку", $"cat_all") }
-                        }),
+                            new[] { InlineKeyboardButton.WithCallbackData("⬅️ К списку", $"cat_{item.CategoryId}") }                        }),
                         cancellationToken: ct
                     );
                 }

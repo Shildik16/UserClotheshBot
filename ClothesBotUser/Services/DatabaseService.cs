@@ -46,8 +46,7 @@ namespace ClothesBotUser.Services
         
         public async Task<Item?> GetItemByIdAsync(int id, CancellationToken ct)
         {
-            const string sql = "SELECT id, name, description, price_stars, photo_file_ids, availability FROM items WHERE id = @id";
-
+            const string sql = "SELECT id, name, description, price_stars, photo_file_ids, availability, category_id FROM items WHERE id = @id";
             await using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync(ct);
             await using var command = new MySqlCommand(sql, connection);
@@ -63,8 +62,9 @@ namespace ClothesBotUser.Services
                     Name = reader.GetString("name"),
                     Description = reader.GetString("description"),
                     PriceStars = reader.GetInt32("price_stars"),
-                    PhotoBytes = reader["photo_file_ids"] as byte[],
-                    Availability = reader.GetString("availability")
+                    PhotoBytes = reader["photo_file_ids"] as byte[], 
+                    Availability = reader.GetString("availability"),
+                    CategoryId = reader.IsDBNull(reader.GetOrdinal("category_id")) ? null : reader.GetInt32("category_id")
                 };
             }
             return null;
