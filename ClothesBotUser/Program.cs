@@ -93,7 +93,7 @@ namespace ClothesBotUser
                     break;
 
                 case "🆘 Поддержка":
-                    await botClient.SendMessage(msgChatId, "Пишите: @admin_username", cancellationToken: ct);
+                    await botClient.SendMessage(msgChatId, "Пишите: @shildik16", cancellationToken: ct);
                     break;
             }
         }
