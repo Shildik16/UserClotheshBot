@@ -119,7 +119,25 @@ namespace ClothesBotUser.Services
             return items;
         }
         
-        
+        public async Task CreateOrderAsync(long userId, string username, int itemId, string comment, CancellationToken ct)
+        {
+            // SQL запрос с учетом всех полей, которые мы обсуждали
+            const string sql = @"INSERT INTO orders (user_telegram_id, user_name, item_id, customer_comment, status, is_notified) 
+                         VALUES (@uid, @uname, @iid, @comment, 'pending', 0)";
+
+            await using var connection = new MySqlConnection(_connectionString);
+            await connection.OpenAsync(ct);
+
+            await using var command = new MySqlCommand(sql, connection);
+    
+            // Привязываем параметры, чтобы избежать SQL-инъекций
+            command.Parameters.AddWithValue("@uid", userId);
+            command.Parameters.AddWithValue("@uname", username ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@iid", itemId);
+            command.Parameters.AddWithValue("@comment", comment ?? (object)DBNull.Value);
+
+            await command.ExecuteNonQueryAsync(ct);
+        }
         
     }
     }
